@@ -332,7 +332,7 @@ export function sbSubscribeNotifications(
       (payload) => onNew(payload.new as Notification)
     )
     .subscribe();
-  return () => supabase!.removeChannel(channel);
+  return () => { supabase!.removeChannel(channel); };
 }
 
 // ─── STATS ────────────────────────────────────────────────────
