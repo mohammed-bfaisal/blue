@@ -66,6 +66,8 @@ npm run build
 
 **No backend needed.** The database is PGlite — PostgreSQL compiled to WASM, running entirely in the browser and persisting to IndexedDB. You don't need a Supabase account, a running server, or any environment variables to contribute.
 
+**If you do enable Supabase:** copy `.env.example` to `.env.local` and fill in credentials from your own Supabase project. Never commit `.env.local` or share your keys — not in PRs, issues, or comments.
+
 ---
 
 ## Branch & Commit Conventions
