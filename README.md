@@ -89,13 +89,20 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173)
 
-**Demo accounts (local mode):**
-| Email | Role |
-|-------|------|
-| `demo@blue.dev` | Regular user |
-| `verifier@blue.dev` | Verifier |
+### Option A — Run your own Supabase (for contributors)
 
-> Password: any string works in local mode — no real auth until Supabase is wired up.
+1. Create a free project at [supabase.com](https://supabase.com)
+2. Run `schema.sql` then `profile_trigger.sql` in the SQL editor
+3. Create `.env.local` in the project root:
+
+```env
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+### Option B — Fully offline (no setup needed)
+
+Without `.env.local`, the app runs on PGlite — a real PostgreSQL engine in the browser backed by IndexedDB. Data is local to your browser only. Good for UI work and feature development.
 
 ---
 
@@ -124,22 +131,6 @@ blue/
 
 ---
 
-## Migrating to Supabase
-
-When you're ready to go multi-user:
-
-1. Create a Supabase project
-2. Run `schema.sql` in the SQL editor
-3. In BLUE → About → **Export All Data** → download JSON
-4. Import via Supabase dashboard
-5. Set env vars:
-
-```env
-VITE_SUPABASE_URL=https://xxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-```
-
----
 
 ## Contributing
 
