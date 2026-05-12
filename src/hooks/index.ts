@@ -7,6 +7,8 @@ import {
   dbGetGuides, dbGetUserUpvotes, dbToggleUpvote,
   dbGetNotifications, dbMarkNotificationRead, dbMarkAllNotificationsRead,
 } from "../lib/db";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
+import { sbGetProfile, sbSubscribeNotifications } from "../lib/supabase-db";
 
 // ─── BREAKPOINT ───────────────────────────────────────────────
 export function useBreakpoint() {
@@ -31,42 +33,80 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Rehydrate session on mount
   useEffect(() => {
-    (async () => {
-      const session = getLocalSession();
-      if (session?.userId) {
-        try {
-          const profile = await dbGetProfile(session.userId);
-          if (profile) setUser(profile);
-        } catch { clearLocalSession(); }
+    if (!isSupabaseConfigured || !supabase) {
+      // PGlite local mode
+      (async () => {
+        const session = getLocalSession();
+        if (session?.userId) {
+          try {
+            const profile = await dbGetProfile(session.userId);
+            if (profile) setUser(profile);
+          } catch { clearLocalSession(); }
+        }
+        setLoading(false);
+      })();
+      return;
+    }
+
+    // Supabase mode: get current session then listen for changes
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const profile = await sbGetProfile(session.user.id);
+        setUser(profile);
       }
       setLoading(false);
-    })();
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (session?.user) {
+          const profile = await sbGetProfile(session.user.id);
+          setUser(profile);
+        } else {
+          setUser(null);
+        }
+      }
+    );
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    setLoading(true);
-    try {
-      const profile = await dbLogin(email, password);
-      setUser(profile);
-    } finally {
-      setLoading(false);
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(true);
+      try { setUser(await dbLogin(email, password)); }
+      finally { setLoading(false); }
+      return;
     }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    // onAuthStateChange will set the user
   }, []);
 
   const register = useCallback(async (email: string, username: string, password: string) => {
-    setLoading(true);
-    try {
-      const profile = await dbRegister(email, username, password);
-      setUser(profile);
-    } finally {
-      setLoading(false);
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(true);
+      try { setUser(await dbRegister(email, username, password)); }
+      finally { setLoading(false); }
+      return;
     }
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { username } },
+    });
+    if (error) throw error;
+    // Profile is created by the DB trigger on auth.users insert
+    // onAuthStateChange will fire and fetch the profile
   }, []);
 
-  const logout = useCallback(() => {
-    clearLocalSession();
+  const logout = useCallback(async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      clearLocalSession();
+      setUser(null);
+      return;
+    }
+    await supabase.auth.signOut();
     setUser(null);
   }, []);
 
@@ -159,6 +199,13 @@ export function useNotifications(userId: string | undefined) {
       .then(rows => setNotifications(rows))
       .catch(() => {})
       .finally(() => setLoadingNotifs(false));
+
+    // Real-time: prepend new notifications as they arrive
+    if (!isSupabaseConfigured) return;
+    const unsub = sbSubscribeNotifications(userId, (n) =>
+      setNotifications(prev => [n, ...prev])
+    );
+    return unsub;
   }, [userId]);
 
   const unreadCount = notifications.filter(n => !n.read).length;

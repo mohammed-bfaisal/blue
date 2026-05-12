@@ -1,5 +1,15 @@
 import { PGlite } from "@electric-sql/pglite";
 import type { Guide, User, Notification, Method, Material, Vote, Dispute } from "../types";
+import { isSupabaseConfigured } from "./supabase";
+import {
+  sbGetGuides, sbGetGuide, sbCreateGuide, sbSubmitGuide,
+  sbSaveMethods, sbSaveMaterials, sbSavePrerequisites,
+  sbToggleUpvote, sbGetUserUpvotes,
+  sbGetVerifierQueue, sbCastVote,
+  sbOpenDispute, sbGetGuideDisputes,
+  sbGetNotifications, sbMarkNotificationRead, sbMarkAllNotificationsRead,
+  sbStats,
+} from "./supabase-db";
 
 // ─── SINGLETON ────────────────────────────────────────────────
 // PGlite persists to IndexedDB — data survives page reloads.
@@ -437,6 +447,7 @@ export async function dbGetGuides(params: {
   niche?: string; level?: number; search?: string;
   status?: string; limit?: number; offset?: number;
 } = {}): Promise<Guide[]> {
+  if (isSupabaseConfigured) return sbGetGuides(params);
   const db = await getDb();
   const { niche, level, search, status = "approved", limit = 50, offset = 0 } = params;
 
@@ -465,6 +476,7 @@ export async function dbGetGuides(params: {
 }
 
 export async function dbGetGuide(id: string): Promise<Guide | null> {
+  if (isSupabaseConfigured) return sbGetGuide(id);
   const db = await getDb();
 
   const { rows: [guide] } = await db.query<any>(
@@ -497,6 +509,7 @@ export async function dbCreateGuide(data: {
   title: string; description: string; niche: string;
   level: number; content: string; tags: string[]; author_id: string;
 }): Promise<Guide> {
+  if (isSupabaseConfigured) return sbCreateGuide(data);
   const db = await getDb();
   const id = crypto.randomUUID();
   await db.query(
@@ -509,6 +522,7 @@ export async function dbCreateGuide(data: {
 }
 
 export async function dbSubmitGuide(guideId: string) {
+  if (isSupabaseConfigured) return sbSubmitGuide(guideId);
   const db = await getDb();
   await db.query(
     `UPDATE guides SET status = 'pending_review', updated_at = NOW() WHERE id = $1`,
@@ -519,6 +533,7 @@ export async function dbSubmitGuide(guideId: string) {
 }
 
 export async function dbSaveMethods(guideId: string, methods: Array<{ title: string; description: string; steps: string[]; sort_order: number }>) {
+  if (isSupabaseConfigured) return sbSaveMethods(guideId, methods);
   const db = await getDb();
   await db.query(`DELETE FROM methods WHERE guide_id = $1`, [guideId]);
   for (const m of methods) {
@@ -531,6 +546,7 @@ export async function dbSaveMethods(guideId: string, methods: Array<{ title: str
 }
 
 export async function dbSaveMaterials(guideId: string, materials: Array<{ name: string; description: string; optional: boolean; rating?: number; sort_order: number }>) {
+  if (isSupabaseConfigured) return sbSaveMaterials(guideId, materials);
   const db = await getDb();
   await db.query(`DELETE FROM materials WHERE guide_id = $1`, [guideId]);
   for (const m of materials) {
@@ -543,6 +559,7 @@ export async function dbSaveMaterials(guideId: string, materials: Array<{ name: 
 }
 
 export async function dbSavePrerequisites(guideId: string, requiresIds: string[]) {
+  if (isSupabaseConfigured) return sbSavePrerequisites(guideId, requiresIds);
   const db = await getDb();
   await db.query(`DELETE FROM guide_prerequisites WHERE guide_id = $1`, [guideId]);
   for (const rid of requiresIds) {
@@ -556,6 +573,7 @@ export async function dbSavePrerequisites(guideId: string, requiresIds: string[]
 // ─── UPVOTES ──────────────────────────────────────────────────
 
 export async function dbToggleUpvote(guideId: string, userId: string, currentlyVoted: boolean) {
+  if (isSupabaseConfigured) return sbToggleUpvote(guideId, userId, currentlyVoted);
   const db = await getDb();
   if (currentlyVoted) {
     await db.query(`DELETE FROM guide_upvotes WHERE guide_id = $1 AND user_id = $2`, [guideId, userId]);
@@ -570,6 +588,7 @@ export async function dbToggleUpvote(guideId: string, userId: string, currentlyV
 }
 
 export async function dbGetUserUpvotes(userId: string): Promise<string[]> {
+  if (isSupabaseConfigured) return sbGetUserUpvotes(userId);
   const db = await getDb();
   const { rows } = await db.query<{ guide_id: string }>(
     `SELECT guide_id FROM guide_upvotes WHERE user_id = $1`, [userId]
@@ -601,6 +620,7 @@ async function dbCreateVerificationSession(guideId: string) {
 }
 
 export async function dbGetVerifierQueue(userId: string) {
+  if (isSupabaseConfigured) return sbGetVerifierQueue(userId);
   const db = await getDb();
   const { rows } = await db.query<any>(
     `SELECT vs.*, g.title, g.description, g.niche, g.level, g.content
@@ -619,6 +639,7 @@ export async function dbCastVote(data: {
   decision: "approve" | "reject"; reasoning: string;
   niche_note?: string; level_note?: number;
 }) {
+  if (isSupabaseConfigured) return sbCastVote(data);
   const db = await getDb();
   const id = crypto.randomUUID();
   await db.query(
@@ -679,6 +700,7 @@ async function dbResolveSessionIfComplete(sessionId: string) {
 // ─── DISPUTES ─────────────────────────────────────────────────
 
 export async function dbOpenDispute(data: { guide_id: string; opener_id: string; reason: string }) {
+  if (isSupabaseConfigured) return sbOpenDispute(data);
   const db = await getDb();
   const id = crypto.randomUUID();
   await db.query(
@@ -689,6 +711,7 @@ export async function dbOpenDispute(data: { guide_id: string; opener_id: string;
 }
 
 export async function dbGetGuideDisputes(guideId: string): Promise<Dispute[]> {
+  if (isSupabaseConfigured) return sbGetGuideDisputes(guideId);
   const db = await getDb();
   const { rows } = await db.query<Dispute>(
     `SELECT d.*, p.username as opener_username
@@ -713,6 +736,7 @@ export async function dbCreateNotification(data: {
 }
 
 export async function dbGetNotifications(userId: string, limit = 30): Promise<Notification[]> {
+  if (isSupabaseConfigured) return sbGetNotifications(userId, limit);
   const db = await getDb();
   const { rows } = await db.query<Notification>(
     `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
@@ -722,11 +746,13 @@ export async function dbGetNotifications(userId: string, limit = 30): Promise<No
 }
 
 export async function dbMarkNotificationRead(id: string) {
+  if (isSupabaseConfigured) return sbMarkNotificationRead(id);
   const db = await getDb();
   await db.query(`UPDATE notifications SET read = TRUE WHERE id = $1`, [id]);
 }
 
 export async function dbMarkAllNotificationsRead(userId: string) {
+  if (isSupabaseConfigured) return sbMarkAllNotificationsRead(userId);
   const db = await getDb();
   await db.query(`UPDATE notifications SET read = TRUE WHERE user_id = $1`, [userId]);
 }
@@ -751,6 +777,7 @@ export async function dbExportAll(): Promise<Record<string, any[]>> {
 }
 
 export async function dbStats(): Promise<{ guides: number; users: number; niches: number }> {
+  if (isSupabaseConfigured) return sbStats();
   const db = await getDb();
   const { rows: [r] } = await db.query<any>(
     `SELECT
