@@ -11,7 +11,7 @@ import {
 import {
   dbGetGuide, dbCreateGuide, dbSaveMethods, dbSaveMaterials,
   dbSavePrerequisites, dbSubmitGuide,
-  dbGetVerifierQueue, dbExportAll, dbStats,
+  dbGetVerifierQueue, dbStats,
 } from "./lib/db";
 import type { Guide, Level, User, Method, Material } from "./types";
 
@@ -539,24 +539,9 @@ function VerifyPage({ isMobile, user, onLoginPrompt }: { isMobile: boolean; user
 function AboutPage({ isMobile }: { isMobile: boolean }) {
   const px = isMobile ? 16 : 32;
   const [stats, setStats] = useState({ guides: 0, users: 0, niches: 0 });
-  const [exporting, setExporting] = useState(false);
-
   useEffect(() => {
     dbStats().then(setStats).catch(() => {});
   }, []);
-
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      const data = await dbExportAll();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `blue-export-${Date.now()}.json`;
-      a.click(); URL.revokeObjectURL(url);
-    } catch (e: any) { alert(`Export failed: ${e.message}`); }
-    setExporting(false);
-  };
 
   return (
     <main style={{ padding: isMobile ? `28px ${px}px 88px` : `48px ${px}px 40px`, maxWidth: 680 }}>
@@ -587,14 +572,6 @@ function AboutPage({ isMobile }: { isMobile: boolean }) {
         </div>
       ))}
 
-      {/* Export */}
-      <div style={{ marginTop: 32, padding: "20px", border: `1px solid ${C.accent}33`, borderRadius: 6, background: C.accentGlow }}>
-        <div style={{ fontSize: 11, color: C.accent, fontFamily: "monospace", letterSpacing: 1, marginBottom: 8 }}>EXPORT / SYNC TO SUPABASE</div>
-        <p style={{ fontSize: 12, color: C.dim, lineHeight: 1.7, marginBottom: 14 }}>
-          Export all local data as JSON. Run <code style={{ fontFamily: "monospace", color: C.text, background: C.surface, padding: "1px 4px", borderRadius: 2 }}>schema.sql</code> on your Supabase project, then import using the Supabase dashboard or CLI.
-        </p>
-        <Button onClick={handleExport} loading={exporting} variant="secondary">Export All Data →</Button>
-      </div>
     </main>
   );
 }
