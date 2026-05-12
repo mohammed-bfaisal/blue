@@ -35,7 +35,6 @@ export function useAuth() {
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
-      // PGlite local mode
       (async () => {
         const session = getLocalSession();
         if (session?.userId) {
@@ -49,25 +48,30 @@ export function useAuth() {
       return;
     }
 
-    // Supabase mode: get current session then listen for changes
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const profile = await sbGetProfile(session.user.id);
-        setUser(profile);
-      }
-      setLoading(false);
-    });
-
+    // Set up subscription FIRST to avoid missing events during getSession
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (session?.user) {
           const profile = await sbGetProfile(session.user.id);
-          setUser(profile);
+          // Attach email from auth session since profiles table doesn't store it
+          if (profile) setUser({ ...profile, email: session.user.email ?? "" });
+          else setUser(null);
         } else {
           setUser(null);
         }
+        setLoading(false);
       }
     );
+
+    // Then check for an existing session (e.g. returning visitor)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const profile = await sbGetProfile(session.user.id);
+        if (profile) setUser({ ...profile, email: session.user.email ?? "" });
+      }
+      setLoading(false);
+    });
+
     return () => subscription.unsubscribe();
   }, []);
 
@@ -79,25 +83,27 @@ export function useAuth() {
       return;
     }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    // onAuthStateChange will set the user
+    if (error) throw new Error(friendlyAuthError(error.message));
+    // user is set by onAuthStateChange
   }, []);
 
-  const register = useCallback(async (email: string, username: string, password: string) => {
+  const register = useCallback(async (
+    email: string, username: string, password: string
+  ): Promise<{ emailConfirmationRequired: boolean }> => {
     if (!isSupabaseConfigured || !supabase) {
       setLoading(true);
       try { setUser(await dbRegister(email, username, password)); }
       finally { setLoading(false); }
-      return;
+      return { emailConfirmationRequired: false };
     }
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { username } },
     });
-    if (error) throw error;
-    // Profile is created by the DB trigger on auth.users insert
-    // onAuthStateChange will fire and fetch the profile
+    if (error) throw new Error(friendlyAuthError(error.message));
+    // If session is null, Supabase requires email confirmation before login
+    return { emailConfirmationRequired: !data.session };
   }, []);
 
   const logout = useCallback(async () => {
@@ -111,6 +117,15 @@ export function useAuth() {
   }, []);
 
   return { user, loading, login, logout, register, isAuthenticated: !!user };
+}
+
+function friendlyAuthError(msg: string): string {
+  if (msg.includes("Invalid login credentials")) return "Incorrect email or password.";
+  if (msg.includes("Email not confirmed")) return "Please confirm your email before signing in.";
+  if (msg.includes("User already registered")) return "An account with this email already exists.";
+  if (msg.includes("Password should be")) return "Password must be at least 8 characters.";
+  if (msg.includes("rate limit")) return "Too many attempts. Please wait a moment and try again.";
+  return msg;
 }
 
 // ─── GUIDE FILTER STATE ───────────────────────────────────────

@@ -600,8 +600,7 @@ function AboutPage({ isMobile }: { isMobile: boolean }) {
 }
 
 // ─── HEADER ───────────────────────────────────────────────────
-function Header({ isMobile, user, onLogin, onLogout, onRegister, authLoading, notifCount, onNotifClick, onSubmitClick }: any) {
-  const [authOpen, setAuthOpen] = useState(false);
+function Header({ isMobile, user, onLogin, onLogout, onRegister, authLoading, notifCount, onNotifClick, onSubmitClick, authOpen, onAuthOpen, onAuthClose }: any) {
   const location = useLocation();
 
   const navLinks: [string, string][] = [["/", "EXPLORE"], ["/hierarchy", "HIERARCHY"], ["/verify", "VERIFY"], ["/about", "ABOUT"]];
@@ -647,7 +646,7 @@ function Header({ isMobile, user, onLogin, onLogout, onRegister, authLoading, no
           ) : (
             <>
               {!isMobile && <Button onClick={onSubmitClick} variant="secondary" size="sm">+ SUBMIT GUIDE</Button>}
-              <Button onClick={() => setAuthOpen(true)} size="sm" variant="ghost">Sign In</Button>
+              <Button onClick={onAuthOpen} size="sm" variant="ghost">Sign In</Button>
             </>
           )}
         </div>
@@ -656,10 +655,10 @@ function Header({ isMobile, user, onLogin, onLogout, onRegister, authLoading, no
       {authOpen && (
         <AuthModal
           open={authOpen}
-          onClose={() => setAuthOpen(false)}
+          onClose={onAuthClose}
           isMobile={isMobile}
-          onLogin={async (e: string, p: string) => { await onLogin(e, p); setAuthOpen(false); }}
-          onRegister={async (e: string, u: string, p: string) => { await onRegister(e, u, p); setAuthOpen(false); }}
+          onLogin={onLogin}
+          onRegister={onRegister}
           loading={authLoading}
         />
       )}
@@ -704,7 +703,16 @@ function AppInner() {
   const [showSubmit, setShowSubmit] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [authPromptOpen, setAuthPromptOpen] = useState(false);
+  const [headerAuthOpen, setHeaderAuthOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+
+  // Close any open auth modal as soon as the user is authenticated
+  useEffect(() => {
+    if (user) {
+      setAuthPromptOpen(false);
+      setHeaderAuthOpen(false);
+    }
+  }, [user]);
 
   const onSubmitClick = () => {
     if (!user) { setAuthPromptOpen(true); return; }
@@ -713,7 +721,7 @@ function AppInner() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Georgia',serif" }}>
-      <Header isMobile={isMobile} user={user} onLogin={login} onLogout={logout} onRegister={register} authLoading={authLoading} notifCount={unreadCount} onNotifClick={() => setShowNotifs(o => !o)} onSubmitClick={onSubmitClick} />
+      <Header isMobile={isMobile} user={user} onLogin={login} onLogout={logout} onRegister={register} authLoading={authLoading} notifCount={unreadCount} onNotifClick={() => setShowNotifs(o => !o)} onSubmitClick={onSubmitClick} authOpen={headerAuthOpen} onAuthOpen={() => setHeaderAuthOpen(true)} onAuthClose={() => setHeaderAuthOpen(false)} />
 
       <Routes>
         <Route path="/" element={<ExplorePage user={user} isMobile={isMobile} isTablet={isTablet} onSubmitClick={onSubmitClick} />} />
@@ -740,8 +748,8 @@ function AppInner() {
 
       {authPromptOpen && (
         <AuthModal open={authPromptOpen} onClose={() => setAuthPromptOpen(false)} isMobile={isMobile}
-          onLogin={async (e, p) => { await login(e, p); setAuthPromptOpen(false); }}
-          onRegister={async (e, u, p) => { await register(e, u, p); setAuthPromptOpen(false); }}
+          onLogin={login}
+          onRegister={register}
           loading={authLoading} />
       )}
 
